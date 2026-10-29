@@ -56,7 +56,7 @@ function Register() {
                 </div>
 
                 <h2 className="fw-bold mt-3 text-white">
-                  Join BookLeaf
+                  Welcome to BookLeaf!
                 </h2>
 
                 <p className="text-light">
