@@ -1,0 +1,63 @@
+
+name: BookLeaf CI/CD to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bookleaf-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test frontend build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+
+            cd /opt/bookleaf
+            git fetch origin main
+            git reset --hard origin/main
+
+            cd /opt/bookleaf/backend
+            npm ci --omit=dev
+
+            cd /opt/bookleaf/frontend
+            npm ci
+            npm run build
+
+            rsync -av --delete \
+              /opt/bookleaf/frontend/dist/ \
+              /var/www/bookleaf/
+
+            sudo nginx -t
+            sudo systemctl restart bookleaf
+            sudo systemctl reload nginx
+
+            sleep 3
+            sudo systemctl is-active --quiet bookleaf
+            curl -fsS http://127.0.0.1/ >/dev/null
+
+            echo "BookLeaf deployment successful"
