@@ -16,48 +16,80 @@ concurrency:
 
 jobs:
   deploy:
+    name: Build and Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Test frontend build
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
-      - name: Deploy to EC2
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Deploy to AWS EC2
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
           script: |
             set -eu
 
             cd /opt/bookleaf
-            git fetch origin main
-            git reset --hard origin/main
 
+            echo "Pulling latest application code..."
+            git pull --ff-only origin main
+
+            echo "Installing backend dependencies..."
             cd /opt/bookleaf/backend
-            npm ci --omit=dev
-
-            cd /opt/bookleaf/frontend
             npm ci
-            npm run build
 
-            rsync -av --delete \
-              /opt/bookleaf/frontend/dist/ \
-              /var/www/bookleaf/
-
-            sudo nginx -t
+            echo "Restarting BookLeaf backend..."
             sudo systemctl restart bookleaf
-            sudo systemctl reload nginx
 
-            sleep 3
+            echo "Checking backend service..."
             sudo systemctl is-active --quiet bookleaf
-            curl -fsS http://127.0.0.1/ >/dev/null
 
-            echo "BookLeaf deployment successful"
+      - name: Copy frontend build to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "frontend/dist/*"
+          target: "/var/www/bookleaf"
+          strip_components: 2
+          overwrite: true
+
+      - name: Verify Nginx configuration
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+            sudo nginx -t
+            sudo systemctl reload nginx
+            sudo systemctl is-active --quiet nginx
+            echo "BookLeaf deployment completed successfully."
