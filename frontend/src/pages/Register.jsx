@@ -63,7 +63,7 @@ function Register() {
                   AI-Powered Author Portal
                 </p>
                 <p className="text-light">
-                  Create by Swatik
+                  Create by Rudra
                 </p>
             
 
