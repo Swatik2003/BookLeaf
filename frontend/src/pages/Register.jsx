@@ -62,6 +62,10 @@ function Register() {
                 <p className="text-light">
                   AI-Powered Author Portal
                 </p>
+                <p className="text-light">
+                  Create by swatik maurya.
+                </p>
+            
 
               </div>
 
